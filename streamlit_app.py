@@ -1,3 +1,4 @@
+from http import client
 import streamlit as st
 import fitz #PyMuPDF
 from openai import OpenAI
@@ -26,7 +27,11 @@ if not openai_api_key:
 
 # Validating the key immediately
 try:
+    client.models.list()
     st.success("API key validated.")
+except Exception:
+    st.error("Invalid API key. Please check and try again.")
+    st.stop()
 
     # Let the user upload a file via `st.file_uploader`.
     uploaded_file = st.file_uploader(
@@ -65,9 +70,7 @@ try:
             stream=True,
         )
 
-except Exception: 
-    st.error("Invalid API key. Please check and try again.")
-    st.stop()
+
 
 
         # Generate an answer using the OpenAI API.

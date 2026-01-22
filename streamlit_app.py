@@ -69,27 +69,7 @@ except Exception:
     st.error("Invalid API key. Please check and try again.")
     st.stop()
 
-    if uploaded_file and question:
-        file_extension = uploaded_file.name.split('.')[-1]. lower()
-        
-        if file_extension == "txt":
-            document = uploaded_file.read().decode("utf-8")
 
-    elif file_extension == "pdf":
-        document = read_pdf(uploaded_file)
-
-    else: 
-        st.error("Unsupported file type.")
-        st.stop()
-
-    
-    document = uploaded_file.read().decode()
-    messages = [
-        {
-            "role": "user",
-            "content": f"Here's a document: {document} \n\n---\n\n {question}",
-        }
-    ]
         # Generate an answer using the OpenAI API.
     stream = client.chat.completions.create(
             model="gpt-3.5-turbo",

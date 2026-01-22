@@ -72,7 +72,7 @@ except Exception:
     if uploaded_file and question:
         file_extension = uploaded_file.name.split('.')[-1]. lower()
         
-        if file_extension == "txt"
+        if file_extension == "txt":
         document = uploaded_file.read().decode("utf-8")
 
     elif file_extension == "pdf":

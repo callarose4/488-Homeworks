@@ -30,21 +30,12 @@ try:
     client.models.list() #simple validation call
     st.success("API key validated.")
 
-    # Let the user upload a file via `st.file_uploader`.
-    uploaded_file = st.file_uploader(
-        "Upload a document (.txt or .pdf)", type=("txt", "pdf")
-    )
-
-    # Ask the user for a question via `st.text_area`.
-    question = st.text_area(
-        "Now ask a question about the document!",
-        placeholder="Can you give me a short summary?",
-        disabled=not uploaded_file,
-    )
+    
 
 except Exception:
     st.error("Invalid API key. Please check and try again.")
     st.stop()
+
 
     if uploaded_file and question:
         file_extension = uploaded_file.name.split('.')[-1].lower()
@@ -64,22 +55,24 @@ except Exception:
             } 
         ]
 
-        # Generate an answer using the OpenAI API.
-        stream = client.chat.completions.create(
+        # Let the user upload a file via `st.file_uploader`.
+    uploaded_file = st.file_uploader(
+        "Upload a document (.txt or .pdf)", type=("txt", "pdf")
+    )
+
+    # Ask the user for a question via `st.text_area`.
+    question = st.text_area(
+        "Now ask a question about the document!",
+        placeholder="Can you give me a short summary?",
+        disabled=not uploaded_file,
+    )
+        
+.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=messages,
             stream=True,
         )
 
-
-
-
-        # Generate an answer using the OpenAI API.
-    stream = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=messages,
-            stream=True,
-        )
 
         # Stream the response to the app using `st.write_stream`.
-    st.write_stream(stream)
+st.write_stream(stream)

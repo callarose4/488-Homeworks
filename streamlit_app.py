@@ -1,4 +1,3 @@
-from http import client
 import streamlit as st
 import fitz #PyMuPDF
 from openai import OpenAI
@@ -27,15 +26,9 @@ if not openai_api_key:
 
 # Validating the key immediately
 try:
-    client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[{"role": "user", "content": "Hello!"}],
-        api_key=openai_api_key, 
-    )
+    client = OpenAI(api_key=openai_api_key)
+    client.models.list() #simple validation call
     st.success("API key validated.")
-except Exception:
-    st.error("Invalid API key. Please check and try again.")
-    st.stop()
 
     # Let the user upload a file via `st.file_uploader`.
     uploaded_file = st.file_uploader(
@@ -48,6 +41,10 @@ except Exception:
         placeholder="Can you give me a short summary?",
         disabled=not uploaded_file,
     )
+
+except Exception:
+    st.error("Invalid API key. Please check and try again.")
+    st.stop()
 
     if uploaded_file and question:
         file_extension = uploaded_file.name.split('.')[-1].lower()

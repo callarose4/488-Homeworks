@@ -1,3 +1,4 @@
+from xml.parsers.expat import model
 import streamlit as st
 import fitz #PyMuPDF
 from openai import OpenAI
@@ -67,7 +68,7 @@ except Exception:
         disabled=not uploaded_file,
     )
         
-.chat.completions.create(
+    stream = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=messages,
             stream=True,

@@ -27,7 +27,11 @@ if not openai_api_key:
 
 # Validating the key immediately
 try:
-    client.models.list()
+    client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[{"role": "user", "content": "Hello!"}],
+        api_key=openai_api_key, 
+    )
     st.success("API key validated.")
 except Exception:
     st.error("Invalid API key. Please check and try again.")

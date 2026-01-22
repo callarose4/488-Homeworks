@@ -38,43 +38,33 @@ except Exception:
     st.stop()
 
 
-    if uploaded_file and question:
-        file_extension = uploaded_file.name.split('.')[-1].lower()
-        
-        if file_extension == "txt":
-            document = uploaded_file.read().decode("utf-8")
-        elif file_extension == "pdf":
-            document = read_pdf(uploaded_file)
-        else: 
-            st.error("Unsupported file type.")
-            st.stop()
+# File uploader and question input
+uploaded_file = st.file_uploader("Upload your document", type=["pdf", "txt"])
+question = st.text_input("Ask a question about your document:")
 
-        messages = [
-            {
-                "role": "user",
-                "content": f"Here's a document: {document} \n\n---\n\n {question}",
-            } 
-        ]
+if uploaded_file and question:
+    file_extension = uploaded_file.name.split('.')[-1].lower()
+    
+    if file_extension == "txt":
+        document = uploaded_file.read().decode("utf-8")
+    elif file_extension == "pdf":
+        document = read_pdf(uploaded_file)
+    else: 
+        st.error("Unsupported file type.")
+        st.stop()
 
-        # Let the user upload a file via `st.file_uploader`.
-    uploaded_file = st.file_uploader(
-        "Upload a document (.txt or .pdf)", type=("txt", "pdf")
-    )
+    messages = [
+        {
+            "role": "user",
+            "content": f"Here's a document: {document} \n\n---\n\n {question}",
+        } 
+    ]
 
-    # Ask the user for a question via `st.text_area`.
-    question = st.text_area(
-        "Now ask a question about the document!",
-        placeholder="Can you give me a short summary?",
-        disabled=not uploaded_file,
-    )
-        
     stream = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=messages,
-            stream=True,
-        )
+        model="gpt-3.5-turbo",
+        messages=messages,
+        stream=True,
+    )
 
-
-        # Stream the response to the app using `st.write_stream`.
-
+    # Stream the response to the app using `st.write_stream`.
     st.write_stream(stream)

@@ -5,6 +5,10 @@ st.title("HW 2")
 st.write("Upload a document below and ask a question about it – GPT will answer!")
 
 summary_type = st.sidebar.radio("Summary type", ["100 words", "2 connected paragraphs", "5 bullet points"])
+language = st.sidebar.selectbox(
+    "Output language",
+    ["English", "French", "Spanish"]
+)
 use_advanced = st.sidebar.checkbox("Use advanced model")
 model = "gpt-4.1" if use_advanced else "gpt-4.1-nano"
 

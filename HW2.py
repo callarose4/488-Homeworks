@@ -8,7 +8,7 @@ summary_type = st.sidebar.radio("Summary type", ["100 words", "2 connected parag
 use_advanced = st.sidebar.checkbox("Use advanced model")
 model = "gpt-4.1" if use_advanced else "gpt-4.1-nano"
 
-openai_api_key = st.secrets["OPENAI_API_KEY"]
+openai_api_key = st.secrets.OPENAI_API_KEY
 client = OpenAI(api_key=openai_api_key)
 
 uploaded_file = st.file_uploader("Upload a document (.txt or .md)", type=("txt", "md"))

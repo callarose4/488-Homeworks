@@ -1,8 +1,24 @@
 import streamlit as st
 from openai import OpenAI
+import requests
+from bs4 import BeautifulSoup
+
+def read_url_content(url):
+    try:
+        response = requests.get(url, timeout=15)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.content, "html.parser")
+        return soup.get_text(separator=" ", strip=True)
+    except requests.RequestException:
+        return None
 
 st.title("HW 2")
 st.write("Upload a document below and ask a question about it – GPT will answer!")
+
+url = st.text_input(
+    "Enter a URL to summarize content from (e.g., a news article or blog post):",
+    placeholder="https://example.com/article"
+)
 
 summary_type = st.sidebar.radio("Summary type", ["100 words", "2 connected paragraphs", "5 bullet points"])
 language = st.sidebar.selectbox(
@@ -18,10 +34,9 @@ if not openai_api_key:
     st.stop()
 client = OpenAI(api_key=openai_api_key)
 
-uploaded_file = st.file_uploader("Upload a document (.txt or .md)", type=("txt", "md"))
 
-if uploaded_file:
-    document = uploaded_file.read().decode("utf-8", errors="ignore")
+if url:
+    page_text = read_url_content(url)
 
     if summary_type == "100 words":
         instruction = "Summarize the document in exactly 100 words."
@@ -29,10 +44,14 @@ if uploaded_file:
         instruction = "Summarize the document in 2 connected paragraphs."
     else:
         instruction = "Summarize the document in 5 concise bullet points."
+    language_instruction = f"Write the summary in {language}."
+
+
+
 
     stream = client.chat.completions.create(
         model=model,
-        messages=[{"role": "user", "content": f"{instruction}\n\nDocument:\n{document}"}],
+        messages=[{"role": "user", "content": f"{instruction}\n\nDocument:\n{page_text}\n\n{language_instruction}"}],
         stream=True,
     )
 

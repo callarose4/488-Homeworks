@@ -1,6 +1,5 @@
-from xml.parsers.expat import model
 import streamlit as st
-import fitz #PyMuPDF
+import fitz
 from openai import OpenAI
 
 def read_pdf(uploaded_file):

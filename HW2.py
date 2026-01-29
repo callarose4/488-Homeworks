@@ -1,6 +1,7 @@
 import streamlit as st
 from openai import OpenAI
 import requests
+import time
 from bs4 import BeautifulSoup
 from anthropic import Anthropic
 
@@ -79,13 +80,23 @@ if url:
 
         client = Anthropic(api_key=anthropic_api_key)
 
-        # Claude streaming
-        with client.messages.stream(
-            model=claude_model,
-            max_tokens=700,
-            messages=[{"role": "user", "content": prompt}],
-        ) as stream:
-            response = st.write_stream(stream.text_stream)
+        # Claude streaming (with 1 retry if overloaded)
+        for attempt in range(2):
+            try:
+                with client.messages.stream(
+                    model=claude_model,
+                    max_tokens=700,
+                    messages=[{"role": "user", "content": prompt}],
+                ) as stream:
+                    response = st.write_stream(stream.text_stream)
+                break  # success
+            except Exception as e:
+                if "overloaded" in str(e).lower() and attempt == 0:
+                    st.warning("Claude is overloaded right now. Retrying once...")
+                    time.sleep(2)
+                else:
+                    st.error(f"Claude request failed: {e}")
+                    st.stop()
 
         st.write("This was the response:")
         st.write(response)

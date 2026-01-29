@@ -97,6 +97,3 @@ if url:
                 else:
                     st.error(f"Claude request failed: {e}")
                     st.stop()
-
-        st.write("This was the response:")
-        st.write(response)

@@ -32,7 +32,7 @@ use_advanced = st.sidebar.checkbox("Use advanced model")
 
 # Models (minimal)
 openai_model = "gpt-4.1" if use_advanced else "gpt-4.1-nano"
-claude_model = "claude-3-opus-20240229" if use_advanced else "claude-3-haiku-20240307"
+claude_model = "claude-sonnet-4-20250514" if use_advanced else "claude-opus-4-20250514"
 
 # Keys (minimal)
 openai_api_key = st.secrets.get("OPENAI_API_KEY") or st.secrets.get("OPEN_API_KEY")
@@ -85,7 +85,8 @@ if url:
             try:
                 with client.messages.stream(
                     model=claude_model,
-                    max_tokens=700,
+                    max_tokens=1500,
+                    temperature=0,
                     messages=[{"role": "user", "content": prompt}],
                 ) as stream:
                     response = st.write_stream(stream.text_stream)

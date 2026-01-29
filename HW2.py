@@ -34,24 +34,26 @@ if not openai_api_key:
     st.stop()
 client = OpenAI(api_key=openai_api_key)
 
-
 if url:
     page_text = read_url_content(url)
 
+    if not page_text:
+        st.error("Could not extract readable text from that URL. Try a different page.")
+        st.stop()
+
     if summary_type == "100 words":
-        instruction = "Summarize the document in exactly 100 words."
+        instruction = "Summarize the webpage in exactly 100 words."
     elif summary_type == "2 connected paragraphs":
-        instruction = "Summarize the document in 2 connected paragraphs."
+        instruction = "Summarize the webpage in exactly 2 connected paragraphs."
     else:
-        instruction = "Summarize the document in 5 concise bullet points."
+        instruction = "Summarize the webpage in exactly 5 concise bullet points."
+
     language_instruction = f"Write the summary in {language}."
-
-
-
+    prompt = f"{instruction}\n{language_instruction}\n\nWebpage text:\n{page_text}"
 
     stream = client.chat.completions.create(
         model=model,
-        messages=[{"role": "user", "content": f"{instruction}\n\nDocument:\n{page_text}\n\n{language_instruction}"}],
+        messages=[{"role": "user", "content": prompt}],
         stream=True,
     )
 

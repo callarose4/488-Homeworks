@@ -2,10 +2,12 @@ import streamlit as st
 from openai import OpenAI
 import requests
 from bs4 import BeautifulSoup
+from anthropic import Anthropic
 
 def read_url_content(url):
     try:
-        response = requests.get(url, timeout=15)
+        headers = {"User-Agent": "Mozilla/5.0"}  # NEW (minimal)
+        response = requests.get(url, headers=headers, timeout=15)  # CHANGED
         response.raise_for_status()
         soup = BeautifulSoup(response.content, "html.parser")
         return soup.get_text(separator=" ", strip=True)
@@ -20,19 +22,20 @@ url = st.text_input(
     placeholder="https://example.com/article"
 )
 
-summary_type = st.sidebar.radio("Summary type", ["100 words", "2 connected paragraphs", "5 bullet points"])
-language = st.sidebar.selectbox(
-    "Output language",
-    ["English", "French", "Spanish"]
-)
-use_advanced = st.sidebar.checkbox("Use advanced model")
-model = "gpt-4.1" if use_advanced else "gpt-4.1-nano"
+# NEW (minimal): choose provider
+provider = st.sidebar.selectbox("LLM provider", ["OpenAI", "Claude"])
 
+summary_type = st.sidebar.radio("Summary type", ["100 words", "2 connected paragraphs", "5 bullet points"])
+language = st.sidebar.selectbox("Output language", ["English", "French", "Spanish"])
+use_advanced = st.sidebar.checkbox("Use advanced model")
+
+# Models (minimal)
+openai_model = "gpt-4.1" if use_advanced else "gpt-4.1-nano"
+claude_model = "claude-3-5-sonnet-latest" if use_advanced else "claude-3-5-haiku-latest"
+
+# Keys (minimal)
 openai_api_key = st.secrets.get("OPENAI_API_KEY") or st.secrets.get("OPEN_API_KEY")
-if not openai_api_key:
-    st.error("Missing API key in Streamlit secrets. Add OPENAI_API_KEY (or OPEN_API_KEY).")
-    st.stop()
-client = OpenAI(api_key=openai_api_key)
+anthropic_api_key = st.secrets.get("ANTHROPIC_API_KEY")
 
 if url:
     page_text = read_url_content(url)
@@ -51,20 +54,38 @@ if url:
     language_instruction = f"Write the summary in {language}."
     prompt = f"{instruction}\n{language_instruction}\n\nWebpage text:\n{page_text}"
 
-    stream = client.chat.completions.create(
-        model=model,
-        messages=[{"role": "user", "content": prompt}],
-        stream=True,
-        temperatue=1
-    )
-#stream the response to the app using 'st_write_stream'
-    response = st.write_stream(stream)
-    st.write("this was the response:" + response)
-    
-    def stream_text(stream):
-        for event in stream:
-            delta = event.choices[0].delta.content
-            if delta:
-                yield delta
+    if provider == "OpenAI":
+        if not openai_api_key:
+            st.error("Missing OpenAI key in Streamlit secrets. Add OPENAI_API_KEY (or OPEN_API_KEY).")
+            st.stop()
 
-    st.write_stream(stream_text(stream))
+        client = OpenAI(api_key=openai_api_key)
+
+        stream = client.chat.completions.create(
+            model=openai_model,
+            messages=[{"role": "user", "content": prompt}],
+            stream=True,
+            temperature=1  # FIXED typo
+        )
+
+        response = st.write_stream(stream)  # keep this
+        st.write("This was the response:")
+        st.write(response)
+
+    else:  # Claude
+        if not anthropic_api_key:
+            st.error("Missing Anthropic key in Streamlit secrets. Add ANTHROPIC_API_KEY.")
+            st.stop()
+
+        client = Anthropic(api_key=anthropic_api_key)
+
+        # Minimal Claude streaming
+        with client.messages.stream(
+            model=claude_model,
+            max_tokens=700,
+            messages=[{"role": "user", "content": prompt}],
+        ) as stream:
+            response = st.write_stream(stream.text_stream)
+
+        st.write("This was the response:")
+        st.write(response)

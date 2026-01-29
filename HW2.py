@@ -13,7 +13,7 @@ def read_url_content(url):
         return None
 
 st.title("HW 2")
-st.write("Upload a document below and ask a question about it – GPT will answer!")
+st.write("Upload a web page below and ask a question about it – GPT will answer!")
 
 url = st.text_input(
     "Enter a URL to summarize content from (e.g., a news article or blog post):",
@@ -55,6 +55,7 @@ if url:
         model=model,
         messages=[{"role": "user", "content": prompt}],
         stream=True,
+        temperatue=1
     )
 
     def stream_text(stream):

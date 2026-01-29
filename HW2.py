@@ -57,7 +57,10 @@ if url:
         stream=True,
         temperatue=1
     )
-
+#stream the response to the app using 'st_write_stream'
+    response = st.write_stream(stream)
+    st.write("this was the response:" + response)
+    
     def stream_text(stream):
         for event in stream:
             delta = event.choices[0].delta.content

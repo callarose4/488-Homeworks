@@ -69,9 +69,8 @@ if url:
             temperature=0  # FIXED typo
         )
 
-        response = st.write_stream(stream)  # keep this
-        st.write("This was the response:")
-        st.write(response)
+        response = st.write_stream(stream)  
+        
 
     else:  # Claude
         if not anthropic_api_key:

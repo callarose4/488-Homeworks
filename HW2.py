@@ -32,7 +32,7 @@ use_advanced = st.sidebar.checkbox("Use advanced model")
 
 # Models (minimal)
 openai_model = "gpt-4.1" if use_advanced else "gpt-4.1-nano"
-claude_model = "claude-sonnet-4-20250514" if use_advanced else "claude-opus-4-20250514"
+claude_model = "claude-opus-4-20250514" if use_advanced else "claude-sonnet-4-20250514"
 
 # Keys (minimal)
 openai_api_key = st.secrets.get("OPENAI_API_KEY") or st.secrets.get("OPEN_API_KEY")

@@ -66,7 +66,7 @@ if url:
             model=openai_model,
             messages=[{"role": "user", "content": prompt}],
             stream=True,
-            temperature=1  # FIXED typo
+            temperature=0  # FIXED typo
         )
 
         response = st.write_stream(stream)  # keep this

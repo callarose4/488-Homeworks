@@ -7,7 +7,7 @@ from anthropic import Anthropic
 
 def read_url_content(url):
     try:
-        headers = {"User-Agent": "Mozilla/5.0"}  # NEW (minimal)
+        headers = {"User-Agent": "Mozilla/5.0"}  
         response = requests.get(url, headers=headers, timeout=15)  # CHANGED
         response.raise_for_status()
         soup = BeautifulSoup(response.content, "html.parser")
@@ -23,18 +23,17 @@ url = st.text_input(
     placeholder="https://example.com/article"
 )
 
-# NEW (minimal): choose provider
+# choose provider
 provider = st.sidebar.selectbox("LLM provider", ["OpenAI", "Claude"])
-
 summary_type = st.sidebar.radio("Summary type", ["100 words", "2 connected paragraphs", "5 bullet points"])
 language = st.sidebar.selectbox("Output language", ["English", "French", "Spanish"])
 use_advanced = st.sidebar.checkbox("Use advanced model")
 
-# Models (minimal)
+# Models 
 openai_model = "gpt-4.1" if use_advanced else "gpt-4.1-nano"
 claude_model = "claude-opus-4-20250514" if use_advanced else "claude-sonnet-4-20250514"
 
-# Keys (minimal)
+# Keys 
 openai_api_key = st.secrets.get("OPENAI_API_KEY") or st.secrets.get("OPEN_API_KEY")
 anthropic_api_key = st.secrets.get("ANTHROPIC_API_KEY")
 

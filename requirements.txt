@@ -3,3 +3,6 @@ openai
 pymupdf
 beautifulsoup4
 anthropic>=0.34.0
+tiktoken
+
+

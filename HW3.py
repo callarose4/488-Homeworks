@@ -168,9 +168,8 @@ else:
     model_to_use = st.sidebar.selectbox(
         "Model",
         [
-            "claude-3-5-sonnet-latest",
-            "claude-3-sonnet-20240229",
-            "claude-3-haiku-20240307",
+            "claude-opus-4-20250514" 
+            "claude-sonnet-4-20250514"
         ],
         disabled=not ANTHROPIC_AVAILABLE,
     )

@@ -190,19 +190,41 @@ st.session_state.setdefault("url_context", "")
 st.session_state.setdefault("loaded_urls", [])
 
 if load_urls:
-    results = []
+    def load_one(url: str, label: str):
+        url = url.strip()
+        if not url:
+            return None
 
+        text = read_url_content(url)
+
+        # Debug: show what happened
+        st.sidebar.write(f"{label} fetched chars: {len(text)}")
+
+        if not text:
+            st.sidebar.warning(f"Could not read {label}.")
+            return None
+
+        # Keep a short label + content
+        return {
+            "url": url,
+            "label": label,
+            "text": text
+        }
+
+    data = []
     for label, url in [("URL 1", url1), ("URL 2", url2)]:
-        if url.strip():
-            text = read_url_content(url.strip())
-            if text:
-                results.append((url.strip(), f"{label} ({url}):\n{text}"))
-            else:
-                st.sidebar.warning(f"Could not read {label}")
+        item = load_one(url, label)
+        if item:
+            data.append(item)
 
-    st.session_state.loaded_urls = [u for u, _ in results]
-    st.session_state.url_context = "\n\n".join(t for _, t in results)
-    st.sidebar.success(f"Loaded {len(results)} URL(s)")
+    st.session_state.loaded_urls = [d["url"] for d in data]
+
+    # Build ONE combined context (both URLs)
+    st.session_state.url_context = "\n\n".join(
+        [f'{d["label"]} ({d["url"]}):\n{d["text"]}' for d in data]
+    )
+
+    st.sidebar.success(f"Loaded {len(st.session_state.loaded_urls)} URL(s).")
 
 # Chat state
 st.session_state.setdefault("awaiting_more_info", False)

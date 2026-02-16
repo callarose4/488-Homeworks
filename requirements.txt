@@ -4,5 +4,8 @@ pymupdf
 beautifulsoup4
 anthropic>=0.34.0
 tiktoken
+chromadb
+pysqlite3-binary
+
 
 

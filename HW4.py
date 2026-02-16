@@ -1,10 +1,12 @@
 import re
 from pathlib import Path
 import chromadb
+import pip
 import streamlit as st
 from bs4 import BeautifulSoup
 from chromadb.utils import embedding_functions
 from openai import OpenAI
+
 
 BASE_DIR = Path(__file__).resolve().parent
 HTML_DIR = BASE_DIR / "HW4-HTML"          # put your provided HTML files here

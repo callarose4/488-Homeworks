@@ -1,4 +1,4 @@
-# --- SQLite fix for Chroma (MUST be first) ---
+# --- SQLite fix for Chroma ---
 import sys
 import pysqlite3
 sys.modules["sqlite3"] = pysqlite3

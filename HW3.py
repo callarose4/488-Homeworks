@@ -4,7 +4,7 @@ import tiktoken
 import requests
 from bs4 import BeautifulSoup
 
-# Anthropic (optional)
+
 try:
     from anthropic import Anthropic
     ANTHROPIC_AVAILABLE = True
@@ -12,9 +12,6 @@ except Exception:
     ANTHROPIC_AVAILABLE = False
 
 
-# ============================
-# URL reader (HW2 reuse)
-# ============================
 def read_url_content(url: str) -> str:
     if not url:
         return ""
@@ -28,9 +25,6 @@ def read_url_content(url: str) -> str:
         return ""
 
 
-# ============================
-# Token helpers (OpenAI only)
-# ============================
 def count_tokens(messages, model_name):
     try:
         enc = tiktoken.encoding_for_model(model_name)
@@ -77,9 +71,7 @@ def yes_no_intent(text: str) -> str:
     return "other"
 
 
-# ============================
-# System prompt
-# ============================
+
 def build_system_prompt(url_context: str) -> str:
     base = (
         "You are a helpful chatbot. Use the provided URL sources as your primary context.\n"
@@ -91,17 +83,13 @@ def build_system_prompt(url_context: str) -> str:
     )
     return base + "\n\nSOURCES:\n" + (url_context if url_context else "(No URLs loaded.)")
 
-
-# ============================
-# Streaming reply
-# ============================
 def stream_assistant_reply(provider, openai_client, anthropic_client, model, messages):
     full = ""
 
     with st.chat_message("assistant"):
         box = st.empty()
 
-        # OpenAI
+        
         if provider == "OpenAI":
             stream = openai_client.chat.completions.create(
                 model=model,
@@ -115,7 +103,7 @@ def stream_assistant_reply(provider, openai_client, anthropic_client, model, mes
                     box.markdown(full)
             return full
 
-        # Anthropic
+        
         if anthropic_client is None:
             msg = "Anthropic not configured. Add ANTHROPIC_API_KEY."
             box.markdown(msg)
@@ -142,9 +130,7 @@ def stream_assistant_reply(provider, openai_client, anthropic_client, model, mes
             return msg
 
 
-# ============================
-# UI
-# ============================
+
 st.title("HW 3 — Streaming URL Chatbot")
 
 st.write(
@@ -152,13 +138,13 @@ st.write(
     "and always keeps URL content in system memory."
 )
 
-# Sidebar: URLs
+
 st.sidebar.header("Sources")
 url1 = st.sidebar.text_input("URL 1")
 url2 = st.sidebar.text_input("URL 2 (optional)")
 load_urls = st.sidebar.button("Load URLs")
 
-# Sidebar: model
+
 st.sidebar.header("Model")
 provider = st.sidebar.selectbox("Vendor", ["OpenAI", "Anthropic"])
 
@@ -176,7 +162,7 @@ else:
 
 MAX_TOKENS = 1200
 
-# Clients
+
 st.session_state.setdefault("openai_client", OpenAI(api_key=st.secrets["OPEN_API_KEY"]))
 st.session_state.setdefault(
     "anthropic_client",
@@ -185,7 +171,7 @@ st.session_state.setdefault(
     else None,
 )
 
-# URL state
+
 st.session_state.setdefault("url_context", "")
 st.session_state.setdefault("loaded_urls", [])
 
@@ -197,7 +183,7 @@ if load_urls:
 
         text = read_url_content(url)
 
-        # Debug: show what happened
+        # Debug
         st.sidebar.write(f"{label} fetched chars: {len(text)}")
 
         if not text:

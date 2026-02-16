@@ -6,6 +6,9 @@ anthropic>=0.34.0
 tiktoken
 chromadb
 pysqlite3-binary
+git add requirements.txt
+git commit -m "Update requirements"
+git push
 
 
 

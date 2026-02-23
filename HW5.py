@@ -72,6 +72,8 @@ def ingest_if_needed(col):
     if ids:
         col.add(ids=ids, documents=docs, metadatas=metas)
 
+st.sidebar.write("Chunks in DB:", col.count())
+st.sidebar.write("HTML folder exists:", HTML_DIR.exists())
 
 def retrieve(col, query: str, k: int = 6):
     res = col.query(query_texts=[query], n_results=k, include=["documents", "metadatas"])

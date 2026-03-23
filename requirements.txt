@@ -8,12 +8,9 @@ chromadb
 pysqlite3-binary
 sentence_transformers
 langchain
+langchain-anthropic
 langchain-openai
-langchain-community
-chromadb
-sentence-transformers
-langchain_anthropic
-anthropic
+langchain.tools
 
 
 

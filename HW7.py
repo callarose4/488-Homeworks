@@ -1,9 +1,11 @@
 import re
+import json
 import pandas as pd
 import streamlit as st
 import anthropic
 import chromadb
 from chromadb.utils import embedding_functions
+from datetime import datetime
 
 
 CSV_PATH = "news.csv"
@@ -22,11 +24,40 @@ SYSTEM_PROMPT = (
     "Answer based only on those articles — do not make up facts.\n\n"
     "When asked for interesting or important news, return a ranked numbered list. "
     "For each item explain why it is significant.\n\n"
-    "You should provide context for “interesting” news.\n\n"
+    "You should provide context for 'interesting' news.\n\n"
     "When asked about a specific company or topic, return all relevant articles. "
     "Always include the article URL. "
-    "Cite articles using [Article N] labels."
+    "Cite articles using [Article N] labels.\n\n"
+    "You have access to a tool called filter_by_date. Use it when the user's query "
+    "mentions a specific date, time period, or relative time reference such as "
+    "'last week', 'in July', 'before August', or 'recent'. "
+    "Call the tool first, then answer based on the filtered articles."
 )
+
+TOOLS = [
+    {
+        "name": "filter_by_date",
+        "description": (
+            "Filters the news article database to only return articles within a "
+            "specified date range. Use this when the user asks about news from a "
+            "specific time period, such as 'last week', 'in July', or 'before August 1st'."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "start_date": {
+                    "type": "string",
+                    "description": "The start of the date range in YYYY-MM-DD format. Leave empty if no lower bound.",
+                },
+                "end_date": {
+                    "type": "string",
+                    "description": "The end of the date range in YYYY-MM-DD format. Leave empty if no upper bound.",
+                },
+            },
+            "required": [],
+        },
+    }
+]
 
 
 @st.cache_resource
@@ -66,12 +97,32 @@ def load_or_build_collection():
     return collection
 
 
-def retrieve_articles(query, collection):
-    results = collection.query(
+def retrieve_articles(query, collection, date_filter=None):
+    where_clause = None
+
+    if date_filter:
+        start = date_filter.get("start_date")
+        end = date_filter.get("end_date")
+        conditions = []
+        if start:
+            conditions.append({"date": {"$gte": start}})
+        if end:
+            conditions.append({"date": {"$lte": end + "T23:59:59+00:00"}})
+        if len(conditions) == 1:
+            where_clause = conditions[0]
+        elif len(conditions) == 2:
+            where_clause = {"$and": conditions}
+
+    query_kwargs = dict(
         query_texts=[query],
         n_results=TOP_K,
         include=["documents", "metadatas", "distances"],
     )
+    if where_clause:
+        query_kwargs["where"] = where_clause
+
+    results = collection.query(**query_kwargs)
+
     articles = []
     for doc, meta, dist in zip(
         results["documents"][0],
@@ -103,26 +154,87 @@ def format_articles(articles):
     return "\n\n---\n\n".join(blocks)
 
 
-def stream_reply(client, model, messages):
+def stream_reply(client, model, messages, collection, prompt):
     full = ""
+    articles = None
+
     with st.chat_message("assistant"):
         box = st.empty()
         try:
             system = messages[0]["content"]
             non_system = [m for m in messages if m["role"] != "system"]
-            with client.messages.stream(
+
+            # First call — may include a tool use request
+            response = client.messages.create(
                 model=model,
                 system=system,
                 messages=non_system,
+                tools=TOOLS,
                 max_tokens=1500,
-            ) as s:
-                for text in s.text_stream:
-                    full += text
-                    box.markdown(full)
+            )
+
+            # Handle tool use if the model calls filter_by_date
+            if response.stop_reason == "tool_use":
+                tool_use_block = next(
+                    b for b in response.content if b.type == "tool_use"
+                )
+                date_filter = tool_use_block.input
+                articles = retrieve_articles(prompt, collection, date_filter=date_filter)
+                context = format_articles(articles)
+
+                # Feed tool result back and stream the final answer
+                tool_result_messages = non_system + [
+                    {"role": "assistant", "content": response.content},
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": tool_use_block.id,
+                                "content": f"Date filter applied ({date_filter}). Here are the filtered articles:\n\n{context}",
+                            }
+                        ],
+                    },
+                ]
+
+                with client.messages.stream(
+                    model=model,
+                    system=system,
+                    messages=tool_result_messages,
+                    max_tokens=1500,
+                ) as s:
+                    for text in s.text_stream:
+                        full += text
+                        box.markdown(full)
+
+            else:
+                # No tool call — standard semantic retrieval, stream normally
+                base_articles = retrieve_articles(prompt, collection)
+                articles = base_articles
+                context = format_articles(base_articles)
+
+                augmented_messages = non_system[:-1] + [
+                    {
+                        "role": "user",
+                        "content": f"{prompt}\n\n=== ARTICLES ===\n\n{context}\n\n=== END ===",
+                    }
+                ]
+
+                with client.messages.stream(
+                    model=model,
+                    system=system,
+                    messages=augmented_messages,
+                    max_tokens=1500,
+                ) as s:
+                    for text in s.text_stream:
+                        full += text
+                        box.markdown(full)
+
         except Exception as e:
             full = f"Error: {e}"
             box.markdown(full)
-    return full
+
+    return full, articles
 
 
 # ── App ───────────────────────────────────────────────────────────────────────
@@ -170,8 +282,9 @@ if prompt:
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    articles = retrieve_articles(prompt, collection)
-    context = format_articles(articles)
+    # Initial retrieval for the first LLM call (tool may override this)
+    initial_articles = retrieve_articles(prompt, collection)
+    context = format_articles(initial_articles)
 
     messages_for_llm = (
         [{"role": "system", "content": SYSTEM_PROMPT}]
@@ -179,14 +292,16 @@ if prompt:
         + [{"role": "user", "content": f"{prompt}\n\n=== ARTICLES ===\n\n{context}\n\n=== END ==="}]
     )
 
-    reply = stream_reply(
+    reply, articles = stream_reply(
         st.session_state.anthropic_client,
         model_id,
         messages_for_llm,
+        collection,
+        prompt,
     )
 
     st.session_state.messages.append(
-        {"role": "assistant", "content": reply, "articles": articles}
+        {"role": "assistant", "content": reply, "articles": articles or initial_articles}
     )
     st.session_state.history.append({"role": "user", "content": prompt})
     st.session_state.history.append({"role": "assistant", "content": reply})

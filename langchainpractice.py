@@ -1,5 +1,5 @@
 import streamlit as st
-from langchain_anthropic import Anthropic
+from langchain_anthropic import ChatAnthropic
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 

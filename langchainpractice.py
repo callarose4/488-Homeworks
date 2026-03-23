@@ -25,20 +25,6 @@ persona = st.sidebar.selectbox(
     ["Film Critic", "Casual Friend", "Movie Journalist"]
 )
 
-# ── LLM ───────────────────────────────────────────────────────────────────────
-if model_choice == "claude-haiku-4-5-20251001":
-    llm = init_chat_model(
-        "claude-haiku-4-5-20251001",
-        temperature=0,
-        api_key=st.secrets["ANTHROPIC_API_KEY"]
-    )
-else:
-    llm = init_chat_model(
-        "gpt-4o-mini",
-        temperature=0,
-        api_key=st.secrets["OPENAI_API_KEY"]
-    )
-
 # ── Session state ─────────────────────────────────────────────────────────────
 if "messages" not in st.session_state:
     st.session_state.messages = []

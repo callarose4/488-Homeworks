@@ -9,11 +9,6 @@ st.title("🎬 Movie Recommendation App")
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 st.sidebar.header("Your Preferences")
 
-model_choice = st.sidebar.selectbox(
-    "Choose a model",
-    ["claude-haiku-4-5-20251001", "gpt-4o-mini"]
-)
-
 genre = st.sidebar.selectbox(
     "Favorite genre?",
     ["Action", "Comedy", "Horror", "Drama", "Sci-Fi", "Thriller", "Romance"]

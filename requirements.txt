@@ -6,5 +6,5 @@ anthropic>=0.34.0
 tiktoken
 chromadb
 pysqlite3-binary
-
+sentence_transformers
 

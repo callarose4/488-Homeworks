@@ -1,192 +1,242 @@
-import re
-import pandas as pd
 import streamlit as st
-import anthropic
-import chromadb
-from chromadb.utils import embedding_functions
+from openai import OpenAI
+import tiktoken
+import requests
+from bs4 import BeautifulSoup
+
+try:
+    from anthropic import Anthropic
+    ANTHROPIC_AVAILABLE = True
+except Exception:
+    ANTHROPIC_AVAILABLE = False
 
 
-CSV_PATH = "news.csv"
-DB_PATH = "./chroma_db"
-TOP_K = 8
-
-MODELS = {
-    "claude-haiku-4-5-20251001 (low-cost)": "claude-haiku-4-5-20251001",
-    "claude-sonnet-4-5 (high-cost)": "claude-sonnet-4-5",
-}
-
-SYSTEM_PROMPT = (
-    "You are a news reporting bot for a large global law firm. "
-    "You help attorneys monitor news about the firm's clients.\n\n"
-    "You will be given a set of news articles as context. "
-    "Answer based only on those articles — do not make up facts.\n\n"
-    "When asked for interesting or important news, return a ranked numbered list. "
-    "For each item explain why it is significant.\n\n"
-    "You should provide context for “interesting” news.\n\n"
-    "When asked about a specific company or topic, return all relevant articles. "
-    "Always include the article URL. "
-    "Cite articles using [Article N] labels."
-)
+def read_url_content(url: str) -> str:
+    if not url:
+        return ""
+    try:
+        headers = {"User-Agent": "Mozilla/5.0"}
+        r = requests.get(url, headers=headers, timeout=15)
+        r.raise_for_status()
+        soup = BeautifulSoup(r.content, "html.parser")
+        return soup.get_text(separator=" ", strip=True)
+    except Exception:
+        return ""
 
 
-@st.cache_resource
-def load_or_build_collection():
-    ef = embedding_functions.SentenceTransformerEmbeddingFunction(
-        model_name="all-MiniLM-L6-v2"
+def count_tokens(messages, model_name):
+    try:
+        enc = tiktoken.encoding_for_model(model_name)
+    except Exception:
+        enc = tiktoken.get_encoding("cl100k_base")
+    total = 0
+    for m in messages:
+        total += len(enc.encode(m.get("content", ""))) + 4
+    return total
+
+
+def enforce_max_tokens(messages, model_name, max_tok):
+    system = []
+    rest = messages[:]
+    if rest and rest[0]["role"] == "system":
+        system = [rest[0]]
+        rest = rest[1:]
+    while rest and count_tokens(system + rest, model_name) > max_tok:
+        rest.pop(0)
+    return system + rest if system else rest
+
+
+def last_two_user_turns(messages):
+    system = [m for m in messages if m["role"] == "system"][:1]
+    user_idxs = [i for i, m in enumerate(messages) if m["role"] == "user"]
+    if len(user_idxs) <= 2:
+        return system + [m for m in messages if m["role"] != "system"]
+    start = user_idxs[-2]
+    return system + [m for m in messages[start:] if m["role"] != "system"]
+
+
+def yes_no_intent(text: str) -> str:
+    t = text.strip().lower()
+    if t in {"yes", "y", "yeah", "yep", "sure"}:
+        return "yes"
+    if t in {"no", "n", "nope", "nah"}:
+        return "no"
+    return "other"
+
+
+def build_system_prompt(url_context: str) -> str:
+    base = (
+        "You are a helpful chatbot. Use the provided URL sources as your primary context.\n"
+        "If the sources do not contain enough info, say what is missing.\n\n"
+        "Explain answers so a 10-year-old can understand.\n"
+        "After answering, ask exactly: Do you want more info?\n"
+        "If the user says Yes, give more info and ask again.\n"
+        "If the user says No, respond exactly: Okay—what can I help you with?\n"
     )
-    client = chromadb.PersistentClient(path=DB_PATH)
-    existing = [c.name for c in client.list_collections()]
-
-    if "news" in existing:
-        return client.get_collection("news", embedding_function=ef)
-
-    df = pd.read_csv(CSV_PATH)
-    df["Date"] = pd.to_datetime(df["Date"], utc=True, errors="coerce")
-    df = df.dropna(subset=["Document"]).reset_index(drop=True)
-
-    collection = client.create_collection(
-        name="news",
-        embedding_function=ef,
-        metadata={"hnsw:space": "cosine"},
-    )
-
-    collection.add(
-        ids=[str(i) for i in df.index],
-        documents=df["Document"].tolist(),
-        metadatas=[
-            {
-                "company": row["company_name"],
-                "date": str(row["Date"]),
-                "url": str(row["URL"]),
-            }
-            for _, row in df.iterrows()
-        ],
-    )
-
-    return collection
+    return base + "\n\nSOURCES:\n" + (url_context if url_context else "(No URLs loaded.)")
 
 
-def retrieve_articles(query, collection):
-    results = collection.query(
-        query_texts=[query],
-        n_results=TOP_K,
-        include=["documents", "metadatas", "distances"],
-    )
-    articles = []
-    for doc, meta, dist in zip(
-        results["documents"][0],
-        results["metadatas"][0],
-        results["distances"][0],
-    ):
-        articles.append(
-            {
-                "text": doc,
-                "company": meta.get("company", ""),
-                "date": meta.get("date", "")[:10],
-                "url": meta.get("url", ""),
-                "similarity": round(1 - dist, 4),
-            }
-        )
-    return articles
-
-
-def format_articles(articles):
-    blocks = []
-    for i, a in enumerate(articles, 1):
-        blocks.append(
-            f"[Article {i}]\n"
-            f"Company: {a['company']}\n"
-            f"Date: {a['date']}\n"
-            f"URL: {a['url']}\n"
-            f"Content: {a['text']}"
-        )
-    return "\n\n---\n\n".join(blocks)
-
-
-def stream_reply(client, model, messages):
+def stream_assistant_reply(provider, openai_client, anthropic_client, model, messages):
     full = ""
     with st.chat_message("assistant"):
         box = st.empty()
-        try:
-            system = messages[0]["content"]
-            non_system = [m for m in messages if m["role"] != "system"]
-            with client.messages.stream(
+        if provider == "OpenAI":
+            stream = openai_client.chat.completions.create(
                 model=model,
-                system=system,
-                messages=non_system,
-                max_tokens=1500,
-            ) as s:
+                messages=messages,
+                stream=True,
+            )
+            for event in stream:
+                delta = event.choices[0].delta.content
+                if delta:
+                    full += delta
+                    box.markdown(full)
+            return full
+
+        if anthropic_client is None:
+            msg = "Anthropic not configured. Add ANTHROPIC_API_KEY."
+            box.markdown(msg)
+            return msg
+
+        system_text = messages[0]["content"]
+        non_system = [m for m in messages if m["role"] != "system"]
+
+        try:
+            stream = anthropic_client.messages.stream(
+                model=model,
+                system=system_text,
+                messages=[{"role": m["role"], "content": m["content"]} for m in non_system],
+                max_tokens=800,
+            )
+            with stream as s:
                 for text in s.text_stream:
                     full += text
                     box.markdown(full)
+            return full
         except Exception as e:
-            full = f"Error: {e}"
-            box.markdown(full)
-    return full
+            msg = f"Anthropic error: {e}"
+            box.markdown(msg)
+            return msg
 
 
-# ── App ───────────────────────────────────────────────────────────────────────
+st.title("HW 3 — Streaming URL Chatbot")
+st.write(
+    "This chatbot streams replies, remembers conversation with a token buffer, "
+    "and always keeps URL content in system memory."
+)
 
-st.title("News Information Bot")
+st.sidebar.header("Sources")
+url1 = st.sidebar.text_input("URL 1")
+url2 = st.sidebar.text_input("URL 2 (optional)")
+load_urls = st.sidebar.button("Load URLs")
 
 st.sidebar.header("Model")
-model_label = st.sidebar.selectbox("Select Model", list(MODELS.keys()))
-model_id = MODELS[model_label]
+provider = st.sidebar.selectbox("Vendor", ["OpenAI", "Anthropic"])
 
-if st.sidebar.button("🗑️ Clear conversation"):
-    st.session_state.messages = []
-    st.session_state.history = []
-    st.rerun()
+if provider == "OpenAI":
+    model_to_use = st.sidebar.selectbox("Model", ["gpt-4.1", "gpt-4o"])
+else:
+    model_to_use = st.sidebar.selectbox(
+        "Model",
+        [
+            "claude-opus-4-20250514",
+            "claude-sonnet-4-20250514"
+        ],
+        disabled=not ANTHROPIC_AVAILABLE,
+    )
 
-with st.spinner("Loading news database..."):
-    try:
-        collection = load_or_build_collection()
-    except Exception as e:
-        st.error(f"Failed to load database: {e}")
-        st.stop()
+MAX_TOKENS = 1200
 
+st.session_state.setdefault("openai_client", OpenAI(api_key=st.secrets["OPEN_API_KEY"]))
 st.session_state.setdefault(
     "anthropic_client",
-    anthropic.Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"]),
+    Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"])
+    if ANTHROPIC_AVAILABLE and "ANTHROPIC_API_KEY" in st.secrets
+    else None,
 )
-st.session_state.setdefault("messages", [])
-st.session_state.setdefault("history", [])
 
+st.session_state.setdefault("url_context", "")
+st.session_state.setdefault("loaded_urls", [])
+
+if load_urls:
+    def load_one(url: str, label: str):
+        url = url.strip()
+        if not url:
+            return None
+        text = read_url_content(url)
+        st.sidebar.write(f"{label} fetched chars: {len(text)}")
+        if not text:
+            st.sidebar.warning(f"Could not read {label}.")
+            return None
+        return {
+            "url": url,
+            "label": label,
+            "text": text
+        }
+
+    data = []
+    for label, url in [("URL 1", url1), ("URL 2", url2)]:
+        item = load_one(url, label)
+        if item:
+            data.append(item)
+
+    st.session_state.loaded_urls = [d["url"] for d in data]
+    st.session_state.url_context = "\n\n".join(
+        [f'{d["label"]} ({d["url"]}):\n{d["text"]}' for d in data]
+    )
+    st.sidebar.success(f"Loaded {len(st.session_state.loaded_urls)} URL(s).")
+
+# Chat state
+st.session_state.setdefault("awaiting_more_info", False)
+st.session_state.setdefault("last_question", "")
+
+# Messages
+if "messages" not in st.session_state:
+    st.session_state.messages = [
+        {"role": "system", "content": build_system_prompt(st.session_state.url_context)}
+    ]
+else:
+    st.session_state.messages[0]["content"] = build_system_prompt(st.session_state.url_context)
+
+# Render history
 for msg in st.session_state.messages:
-    with st.chat_message(msg["role"]):
-        st.markdown(msg["content"])
-        if msg.get("articles"):
-            with st.expander(f"📄 {len(msg['articles'])} articles retrieved"):
-                for a in msg["articles"]:
-                    st.markdown(
-                        f"**{a['company']}** · {a['date']} · similarity: `{a['similarity']}`  \n"
-                        f"[{a['url']}]({a['url']})"
-                    )
+    if msg["role"] != "system":
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
 
-prompt = st.chat_input("Ask about the news...")
+prompt = st.chat_input("Ask me something!")
 
 if prompt:
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    articles = retrieve_articles(prompt, collection)
-    context = format_articles(articles)
+    intent = yes_no_intent(prompt)
 
-    messages_for_llm = (
-        [{"role": "system", "content": SYSTEM_PROMPT}]
-        + st.session_state.history
-        + [{"role": "user", "content": f"{prompt}\n\n=== ARTICLES ===\n\n{context}\n\n=== END ==="}]
-    )
+    if st.session_state.awaiting_more_info and intent == "no":
+        reply = "Okay—what can I help you with?"
+        st.session_state.awaiting_more_info = False
+    else:
+        if intent == "yes":
+            st.session_state.messages.append(
+                {"role": "user", "content": f"Give more info about: {st.session_state.last_question}"}
+            )
+        else:
+            st.session_state.last_question = prompt
+            st.session_state.awaiting_more_info = True
 
-    reply = stream_reply(
-        st.session_state.anthropic_client,
-        model_id,
-        messages_for_llm,
-    )
+        msgs = last_two_user_turns(st.session_state.messages)
 
-    st.session_state.messages.append(
-        {"role": "assistant", "content": reply, "articles": articles}
-    )
-    st.session_state.history.append({"role": "user", "content": prompt})
-    st.session_state.history.append({"role": "assistant", "content": reply})
+        if provider == "OpenAI":
+            msgs = enforce_max_tokens(msgs, model_to_use, MAX_TOKENS)
+            st.sidebar.write(f"Tokens: {count_tokens(msgs, model_to_use)}")
+
+        reply = stream_assistant_reply(
+            provider,
+            st.session_state.openai_client,
+            st.session_state.anthropic_client,
+            model_to_use,
+            msgs,
+        )
+
+    st.session_state.messages.append({"role": "assistant", "content": reply})

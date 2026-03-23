@@ -27,9 +27,9 @@ persona = st.sidebar.selectbox(
 
 # ── LLM ───────────────────────────────────────────────────────────────────────
 llm = init_chat_model(
-    "claude-haiku-4-5-20251001",
+    "gpt-3.5-turbo",
     temperature=0,
-    api_key=st.secrets["ANTHROPIC_API_KEY"]
+    api_key=st.secrets["OPEN_API_KEY"]
 )
 
 # ── Session state ─────────────────────────────────────────────────────────────

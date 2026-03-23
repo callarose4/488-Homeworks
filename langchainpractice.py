@@ -3,20 +3,16 @@ from langchain.chat_models import init_chat_model
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
-st.title("🎬 Movie Recommendation Chatbot")
+st.title(" Movie Recommendation App")
 
+# Initialize LLM
 llm = init_chat_model(
     "claude-haiku-4-5-20251001",
     temperature=0
 )
-prompt = PromptTemplate(
-    input_variables=["genre", "mood"],
-    template="""You are a movie recommendation assistant.
-The user likes {genre} movies and is feeling {mood}.
-Recommend 3 movies and explain why each one fits."""
-)
 
-chain = prompt | llm | StrOutputParser()
+# Sidebar inputs
+st.sidebar.header("Your Preferences")
 
 genre = st.sidebar.selectbox(
     "Favorite genre?",
@@ -28,37 +24,29 @@ mood = st.sidebar.selectbox(
     ["Excited", "Happy", "Sad", "Bored", "Scared", "Romantic", "Curious", "Tense", "Melancholy"]
 )
 
-if st.button("Get Recommendations"):
-    response = chain.invoke({"genre": genre, "mood": mood})
-    st.write(response)
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.messages import HumanMessage, AIMessage
+persona = st.sidebar.selectbox(
+    "Recommendation style?",
+    ["Film Critic", "Casual Friend", "Movie Journalist"]
+)
 
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+# Prompt template
+prompt = PromptTemplate(
+    input_variables=["genre", "mood", "persona"],
+    template="""You are a {persona} giving movie recommendations.
+The user likes {genre} movies and is feeling {mood}.
+Recommend 3 movies and explain why each one fits.
+Match your tone and style to your persona."""
+)
 
-prompt = ChatPromptTemplate.from_messages([
-    ("system", """You are a helpful movie recommendation assistant. 
-Remember everything the user tells you about their preferences."""),
-    MessagesPlaceholder(variable_name="history"),
-    ("human", "{input}")
-])
-
+# Build chain
 chain = prompt | llm | StrOutputParser()
 
-for msg in st.session_state.messages:
-    role = "user" if isinstance(msg, HumanMessage) else "assistant"
-    st.chat_message(role).write(msg.content)
-
-user_input = st.chat_input("Tell me what you want to watch...")
-if user_input:
-    st.chat_message("user").write(user_input)
-
-    response = chain.invoke({
-        "history": st.session_state.messages,
-        "input": user_input
-    })
-
-    st.chat_message("assistant").write(response)
-    st.session_state.messages.append(HumanMessage(content=user_input))
-    st.session_state.messages.append(AIMessage(content=response))
+# Button and response
+if st.button("Get Recommendations"):
+    with st.spinner("Finding movies..."):
+        response = chain.invoke({
+            "genre": genre,
+            "mood": mood,
+            "persona": persona
+        })
+    st.write(response)

@@ -2,6 +2,12 @@ import streamlit as st
 from langchain_anthropic import ChatAnthropic
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
+from langchain import ConversationBufferMemory
+from langchain import ConversationChain
+
+
+
+
 
 st.title(" Movie Recommendation Chatbot")
 
@@ -24,8 +30,6 @@ mood = st.text_input("How are you feeling?", "excited")
 if st.button("Get Recommendations"):
     response = chain.invoke({"genre": genre, "mood": mood})
     st.write(response)
-from langchain.memory import ConversationBufferMemory
-from langchain.chains import ConversationChain
 
 if "memory" not in st.session_state:
     st.session_state.memory = ConversationBufferMemory()

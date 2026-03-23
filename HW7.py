@@ -7,21 +7,19 @@ import chromadb
 import pandas as pd
 from chromadb.utils import embedding_functions
 
-# ── Page config ──────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="News Information Bot",
     page_icon="📰",
     layout="wide",
 )
 
-# ── Constants ─────────────────────────────────────────────────────────────────
 CSV_PATH = "news.csv"
 DB_PATH = "./chroma_db"
 TOP_K = 8
 
 MODELS = {
-    "claude-haiku-4-5-20251001 (low-cost)": "claude-haiku-4-5-20251001",
-    "claude-sonnet-4-5 (high-cost)": "claude-sonnet-4-5",
+    "claude-haiku-4-5-20251001": "claude-haiku-4-5-20251001",
+    "claude-sonnet-4-5": "claude-sonnet-4-5",
 }
 
 SYSTEM_PROMPT = """You are a professional news analyst assistant for a large global law firm.
@@ -41,10 +39,9 @@ When asked to find news about a specific company or topic:
 - Include the article URL so attorneys can read the full piece
 
 Always cite which article(s) you are drawing from using the [Article N] label.
+Explain the reasoning behind your choosing of each article for prompted descriptions clearly and concisely. 
 Be concise, professional, and accurate. If no relevant articles are found, say so clearly."""
 
-
-# ── Build or load ChromaDB ────────────────────────────────────────────────────
 @st.cache_resource
 def load_or_build_collection():
     """
@@ -56,13 +53,12 @@ def load_or_build_collection():
     )
     client = chromadb.PersistentClient(path=DB_PATH)
 
-    # Check if collection already exists
     existing = [c.name for c in client.list_collections()]
     if "news" in existing:
         collection = client.get_collection("news", embedding_function=ef)
         return collection
 
-    # Build from CSV
+
     df = pd.read_csv(CSV_PATH)
     df["Date"] = pd.to_datetime(df["Date"], utc=True, errors="coerce")
     df = df.dropna(subset=["Document"]).reset_index(drop=True)

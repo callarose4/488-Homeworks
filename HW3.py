@@ -22,6 +22,7 @@ SYSTEM_PROMPT = (
     "Answer based only on those articles — do not make up facts.\n\n"
     "When asked for interesting or important news, return a ranked numbered list. "
     "For each item explain why it is significant.\n\n"
+    "You should provide context for “interesting” news.\n\n"
     "When asked about a specific company or topic, return all relevant articles. "
     "Always include the article URL. "
     "Cite articles using [Article N] labels."
@@ -126,7 +127,7 @@ def stream_reply(client, model, messages):
 
 # ── App ───────────────────────────────────────────────────────────────────────
 
-st.title("📰 News Information Bot")
+st.title("News Information Bot")
 
 st.sidebar.header("Model")
 model_label = st.sidebar.selectbox("Select Model", list(MODELS.keys()))

@@ -5,7 +5,6 @@ import streamlit as st
 import anthropic
 import chromadb
 from chromadb.utils import embedding_functions
-from datetime import datetime
 
 
 CSV_PATH = "news.csv"
@@ -28,33 +27,31 @@ SYSTEM_PROMPT = (
     "When asked about a specific company or topic, return all relevant articles. "
     "Always include the article URL. "
     "Cite articles using [Article N] labels.\n\n"
-    "You have access to a tool called filter_by_date. Use it when the user's query "
-    "mentions a specific date, time period, or relative time reference such as "
-    "'last week', 'in July', 'before August', or 'recent'. "
-    "Call the tool first, then answer based on the filtered articles."
+    "You have access to a tool called summarize_company. Use it when the user asks "
+    "for a summary, brief, or overview of a specific company — for example "
+    "'summarize Nvidia' or 'give me a brief on Caterpillar'. "
+    "Call the tool with the company name, then use the returned articles to write "
+    "a structured client brief with: key developments, any legal or regulatory risks, "
+    "and a one-line takeaway for the attorney."
 )
 
 TOOLS = [
     {
-        "name": "filter_by_date",
+        "name": "summarize_company",
         "description": (
-            "Filters the news article database to only return articles within a "
-            "specified date range. Use this when the user asks about news from a "
-            "specific time period, such as 'last week', 'in July', or 'before August 1st'."
+            "Retrieves all available news articles for a specific company by name "
+            "and returns them so the model can produce a structured client brief. "
+            "Use this when the user asks for a summary or overview of a company."
         ),
         "input_schema": {
             "type": "object",
             "properties": {
-                "start_date": {
+                "company_name": {
                     "type": "string",
-                    "description": "The start of the date range in YYYY-MM-DD format. Leave empty if no lower bound.",
-                },
-                "end_date": {
-                    "type": "string",
-                    "description": "The end of the date range in YYYY-MM-DD format. Leave empty if no upper bound.",
-                },
+                    "description": "The exact or partial name of the company to look up.",
+                }
             },
-            "required": [],
+            "required": ["company_name"],
         },
     }
 ]
@@ -87,8 +84,7 @@ def load_or_build_collection():
         metadatas=[
             {
                 "company": row["company_name"],
-                "date": int(row["Date"].timestamp()) if pd.notna(row["Date"]) else 0,
-                "date_str": str(row["Date"])[:10],
+                "date": str(row["Date"])[:10],
                 "url": str(row["URL"]),
             }
             for _, row in df.iterrows()
@@ -98,34 +94,12 @@ def load_or_build_collection():
     return collection
 
 
-def retrieve_articles(query, collection, date_filter=None):
-    where_clause = None
-
-    if date_filter:
-        start = date_filter.get("start_date")
-        end = date_filter.get("end_date")
-        conditions = []
-        if start:
-            ts_start = int(datetime.strptime(start, "%Y-%m-%d").timestamp())
-            conditions.append({"date": {"$gte": ts_start}})
-        if end:
-            ts_end = int(datetime.strptime(end, "%Y-%m-%d").timestamp()) + 86399
-            conditions.append({"date": {"$lte": ts_end}})
-        if len(conditions) == 1:
-            where_clause = conditions[0]
-        elif len(conditions) == 2:
-            where_clause = {"$and": conditions}
-
-    query_kwargs = dict(
+def retrieve_articles(query, collection):
+    results = collection.query(
         query_texts=[query],
         n_results=TOP_K,
         include=["documents", "metadatas", "distances"],
     )
-    if where_clause:
-        query_kwargs["where"] = where_clause
-
-    results = collection.query(**query_kwargs)
-
     articles = []
     for doc, meta, dist in zip(
         results["documents"][0],
@@ -136,7 +110,33 @@ def retrieve_articles(query, collection, date_filter=None):
             {
                 "text": doc,
                 "company": meta.get("company", ""),
-                "date": meta.get("date_str", ""),
+                "date": meta.get("date", ""),
+                "url": meta.get("url", ""),
+                "similarity": round(1 - dist, 4),
+            }
+        )
+    return articles
+
+
+def retrieve_by_company(company_name, collection):
+    """Fetch all articles whose company metadata matches the given name."""
+    results = collection.query(
+        query_texts=[company_name],
+        n_results=TOP_K,
+        where={"company": {"$contains": company_name}},
+        include=["documents", "metadatas", "distances"],
+    )
+    articles = []
+    for doc, meta, dist in zip(
+        results["documents"][0],
+        results["metadatas"][0],
+        results["distances"][0],
+    ):
+        articles.append(
+            {
+                "text": doc,
+                "company": meta.get("company", ""),
+                "date": meta.get("date", ""),
                 "url": meta.get("url", ""),
                 "similarity": round(1 - dist, 4),
             }
@@ -167,7 +167,7 @@ def stream_reply(client, model, messages, collection, prompt):
             system = messages[0]["content"]
             non_system = [m for m in messages if m["role"] != "system"]
 
-            # First call — may include a tool use request
+            # First call — check if model wants to use a tool
             response = client.messages.create(
                 model=model,
                 system=system,
@@ -176,16 +176,14 @@ def stream_reply(client, model, messages, collection, prompt):
                 max_tokens=1500,
             )
 
-            # Handle tool use if the model calls filter_by_date
             if response.stop_reason == "tool_use":
                 tool_use_block = next(
                     b for b in response.content if b.type == "tool_use"
                 )
-                date_filter = tool_use_block.input
-                articles = retrieve_articles(prompt, collection, date_filter=date_filter)
+                company_name = tool_use_block.input.get("company_name", "")
+                articles = retrieve_by_company(company_name, collection)
                 context = format_articles(articles)
 
-                # Feed tool result back and stream the final answer
                 tool_result_messages = non_system + [
                     {"role": "assistant", "content": response.content},
                     {
@@ -194,7 +192,10 @@ def stream_reply(client, model, messages, collection, prompt):
                             {
                                 "type": "tool_result",
                                 "tool_use_id": tool_use_block.id,
-                                "content": f"Date filter applied ({date_filter}). Here are the filtered articles:\n\n{context}",
+                                "content": (
+                                    f"Here are all articles found for '{company_name}':\n\n"
+                                    f"{context}"
+                                ),
                             }
                         ],
                     },
@@ -211,10 +212,9 @@ def stream_reply(client, model, messages, collection, prompt):
                         box.markdown(full)
 
             else:
-                # No tool call — standard semantic retrieval, stream normally
-                base_articles = retrieve_articles(prompt, collection)
-                articles = base_articles
-                context = format_articles(base_articles)
+                # No tool call — standard semantic retrieval
+                articles = retrieve_articles(prompt, collection)
+                context = format_articles(articles)
 
                 augmented_messages = non_system[:-1] + [
                     {
@@ -285,7 +285,7 @@ if prompt:
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Initial retrieval for the first LLM call (tool may override this)
+    # Initial retrieval passed into first LLM call
     initial_articles = retrieve_articles(prompt, collection)
     context = format_articles(initial_articles)
 

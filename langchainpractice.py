@@ -18,8 +18,15 @@ Recommend 3 movies and explain why each one fits."""
 
 chain = prompt | llm | StrOutputParser()
 
-genre = st.text_input("Favorite genre?", "action")
-mood = st.text_input("How are you feeling?", "excited")
+genre = st.sidebar.selectbox(
+    "Favorite genre?",
+    ["Action", "Comedy", "Horror", "Drama", "Sci-Fi", "Thriller", "Romance"]
+)
+
+mood = st.sidebar.selectbox(
+    "How are you feeling?",
+    ["Excited", "Happy", "Sad", "Bored", "Scared", "Romantic", "Curious", "Tense", "Melancholy"]
+)
 
 if st.button("Get Recommendations"):
     response = chain.invoke({"genre": genre, "mood": mood})

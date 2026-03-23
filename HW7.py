@@ -87,7 +87,8 @@ def load_or_build_collection():
         metadatas=[
             {
                 "company": row["company_name"],
-                "date": str(row["Date"]),
+                "date": int(row["Date"].timestamp()) if pd.notna(row["Date"]) else 0,
+                "date_str": str(row["Date"])[:10],
                 "url": str(row["URL"]),
             }
             for _, row in df.iterrows()
@@ -105,9 +106,11 @@ def retrieve_articles(query, collection, date_filter=None):
         end = date_filter.get("end_date")
         conditions = []
         if start:
-            conditions.append({"date": {"$gte": start}})
+            ts_start = int(datetime.strptime(start, "%Y-%m-%d").timestamp())
+            conditions.append({"date": {"$gte": ts_start}})
         if end:
-            conditions.append({"date": {"$lte": end + "T23:59:59+00:00"}})
+            ts_end = int(datetime.strptime(end, "%Y-%m-%d").timestamp()) + 86399
+            conditions.append({"date": {"$lte": ts_end}})
         if len(conditions) == 1:
             where_clause = conditions[0]
         elif len(conditions) == 2:
@@ -133,7 +136,7 @@ def retrieve_articles(query, collection, date_filter=None):
             {
                 "text": doc,
                 "company": meta.get("company", ""),
-                "date": meta.get("date", "")[:10],
+                "date": meta.get("date_str", ""),
                 "url": meta.get("url", ""),
                 "similarity": round(1 - dist, 4),
             }

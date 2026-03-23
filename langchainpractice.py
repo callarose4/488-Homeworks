@@ -5,7 +5,7 @@ from langchain_core.output_parsers import StrOutputParser
 
 st.title("🎬 Movie Recommendation Chatbot")
 
-llm = Anthropic(
+llm = ChatAnthropic(
     model="claude-haiku-4-5-20251001",
     api_key=st.secrets["ANTHROPIC_API_KEY"]
 )

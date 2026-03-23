@@ -7,4 +7,13 @@ tiktoken
 chromadb
 pysqlite3-binary
 sentence_transformers
+langchain
+langchain-openai
+langchain-community
+chromadb
+sentence-transformers
+langchain_anthropic
+anthropic
+
+
 

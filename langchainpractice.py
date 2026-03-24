@@ -1,109 +1,98 @@
+import os
 import streamlit as st
-from langchain.chat_models import init_chat_model
-from langchain_core.prompts import PromptTemplate, ChatPromptTemplate, MessagesPlaceholder
+from langchain.prompts import PromptTemplate
+from langchain_openai import ChatOpenAI
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.messages import HumanMessage, AIMessage
-
-st.title("🎬 Movie Recommendation App")
-
-# ── Sidebar ───────────────────────────────────────────────────────────────────
-st.sidebar.header("Your Preferences")
-
-genre = st.sidebar.selectbox(
-    "Favorite genre?",
-    ["Action", "Comedy", "Horror", "Drama", "Sci-Fi", "Thriller", "Romance"]
+from langchain.tools import tool
+from langchain_community.tools import DuckDuckGoSearchRun
+from langchain.agents import create_agent
+ 
+# ── API KEY ──────────────────────────────────────────────────────────────────
+ 
+# ── PART A: BUILD THE CHAIN ──────────────────────────────────────────────────
+ 
+# Initialize the LLM
+llm = ChatOpenAI(model="gpt-4o-mini")
+ 
+# Create a PromptTemplate that takes 'genre' and 'mood' as variables
+# and formats them into a specific search query
+prompt = PromptTemplate.from_template(
+    """Generate a specific web search query to find great movie recommendations.
+    Genre: {genre}
+    Mood/Atmosphere: {mood}
+    Return only the search query string, nothing else.
+    Example output: best thriller movies with suspenseful dark atmosphere 2023 2024"""
 )
-
-mood = st.sidebar.selectbox(
-    "How are you feeling?",
-    ["Excited", "Happy", "Sad", "Bored", "Scared", "Romantic",
-     "Curious", "Tense", "Melancholy"]
-)
-
-persona = st.sidebar.selectbox(
-    "Recommendation style?",
-    ["Film Critic", "Casual Friend", "Movie Journalist"]
-)
-
-# ── LLM ───────────────────────────────────────────────────────────────────────
-llm = init_chat_model(
-    "gpt-3.5-turbo",
-    temperature=0,
-    api_key=st.secrets["OPEN_API_KEY"]
-)
-
-# ── Session state ─────────────────────────────────────────────────────────────
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-
-# ── Part B: Basic recommendation chain ───────────────────────────────────────
-st.subheader("Get Recommendations")
-
-recommendation_prompt = PromptTemplate(
-    input_variables=["genre", "mood", "persona"],
-    template="""You are a {persona} giving movie recommendations.
-The user likes {genre} movies and is feeling {mood}.
-Recommend 3 movies and explain why each one fits.
-Match your tone and style to your persona."""
-)
-
-recommendation_chain = recommendation_prompt | llm | StrOutputParser()
-
-with st.expander("👀 See what LangChain sends to the model"):
-    st.code(recommendation_prompt.format(
-        genre=genre,
-        mood=mood,
-        persona=persona
-    ))
-
-if st.button("Get Recommendations"):
-    with st.spinner("Finding movies..."):
-        response = recommendation_chain.invoke({
-            "genre": genre,
-            "mood": mood,
-            "persona": persona
-        })
-
-    st.write(response)
-
-    st.session_state.messages.append(
-        HumanMessage(content=f"Recommend {genre} movies for someone feeling {mood}. Style: {persona}")
-    )
-    st.session_state.messages.append(AIMessage(content=response))
-
+ 
+# Build the chain: prompt -> llm -> output parser
+query_chain = prompt | llm | StrOutputParser()
+ 
+ 
+# ── PART B: CREATE THE CUSTOM TOOLS ─────────────────────────────────────────
+ 
+# Initialize DuckDuckGo search — no API key needed!
+search = DuckDuckGoSearchRun()
+ 
+@tool
+def search_movies(query: str) -> str:
+    """Search for movie recommendations based on user preferences and genre.
+    Use this tool when the user wants to find movies to watch."""
+    return search.invoke(query)
+ 
+@tool
+def get_movie_reviews(movie_title: str) -> str:
+    """Get critic reviews and ratings for a specific movie title.
+    Use this tool when the user wants to know what critics think about
+    a particular movie, or wants review scores and ratings."""
+    return search.invoke(f"{movie_title} review rotten tomatoes critic score")
+ 
+ 
+# ── PART C: BUILD THE AGENT ──────────────────────────────────────────────────
+ 
+tools = [search_movies, get_movie_reviews]
+agent = create_agent(llm, tools=tools)
+ 
+ 
+# ── STREAMLIT UI ─────────────────────────────────────────────────────────────
+ 
+st.title("🎬 Movie Recommendation Agent")
+st.write("Tell me what you're in the mood for and I'll find real recommendations from the web.")
+ 
+# Two input fields for genre and mood
+genre = st.text_input("What genre are you in the mood for?", placeholder="e.g. thriller, sci-fi, comedy")
+mood = st.text_input("What's the vibe or atmosphere you want?", placeholder="e.g. dark and suspenseful, feel-good, mind-bending")
+ 
+if st.button("Find Movies"):
+    if genre and mood:
+        with st.spinner("Searching the web..."):
+ 
+            # Step 1: Run the chain to generate a search query
+            search_query = query_chain.invoke({"genre": genre, "mood": mood})
+ 
+            # Step 2: Pass the search query to the agent
+            response = agent.invoke({
+                "messages": [("user", search_query)]
+            })
+ 
+            # Display the agent's response
+            st.subheader("🍿 Recommendations")
+            st.write(response["messages"][-1].content)
+ 
+    else:
+        st.warning("Please fill in both genre and mood before searching.")
+ 
+# ── PART D: REVIEW TOOL ──────────────────────────────────────────────────────
+ 
 st.divider()
-
-# ── Part C: Follow up chat with memory ───────────────────────────────────────
-st.subheader("Ask Follow-Up Questions")
-
-conversation_prompt = ChatPromptTemplate.from_messages([
-    ("system", """You are a helpful movie recommendation assistant.
-You have already provided movie recommendations to the user.
-Answer any follow up questions they have about the movies,
-directors, actors, or anything else related to the recommendations."""),
-    MessagesPlaceholder(variable_name="history"),
-    ("human", "{input}")
-])
-
-conversation_chain = conversation_prompt | llm | StrOutputParser()
-
-for msg in st.session_state.messages:
-    role = "user" if isinstance(msg, HumanMessage) else "assistant"
-    st.chat_message(role).write(msg.content)
-
-user_input = st.chat_input("Ask a follow up question...")
-if user_input:
-    st.chat_message("user").write(user_input)
-
-    response = conversation_chain.invoke({
-        "history": st.session_state.messages,
-        "input": user_input
-    })
-
-    st.chat_message("assistant").write(response)
-    st.session_state.messages.append(HumanMessage(content=user_input))
-    st.session_state.messages.append(AIMessage(content=response))
-
-if st.sidebar.button("🗑️ Clear conversation"):
-    st.session_state.messages = []
-    st.rerun()
+st.subheader("🎥 Get Reviews for a Specific Movie")
+movie_title = st.text_input("Want reviews for a specific movie? Enter the title:")
+ 
+if st.button("Get Reviews"):
+    if movie_title:
+        with st.spinner("Fetching reviews..."):
+            review_response = agent.invoke({
+                "messages": [("user", f"Get me critic reviews and ratings for the movie: {movie_title}")]
+            })
+            st.write(review_response["messages"][-1].content)
+    else:
+        st.warning("Please enter a movie title.")

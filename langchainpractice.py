@@ -8,8 +8,8 @@ from langchain_community.tools import DuckDuckGoSearchRun
 from langchain.agents import create_agent
  
 # ── API KEY ──────────────────────────────────────────────────────────────────
-openai_api_key = st.secrets.get("OPENAI_API_KEY") or st.secrets.get("OPEN_API_KEY")
-anthropic_api_key = st.secrets.get("ANTHROPIC_API_KEY")
+os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
+os.environ["ANTHROPIC_API_KEY"] = st.secrets["ANTHROPIC_API_KEY"]
 # ── PART A: BUILD THE CHAIN ──────────────────────────────────────────────────
  
 # Initialize the LLM

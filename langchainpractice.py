@@ -6,14 +6,13 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain.tools import tool
 from langchain_community.tools import DuckDuckGoSearchRun
 from langchain.agents import create_agent
- 
-# ── API KEY ──────────────────────────────────────────────────────────────────
-os.environ["OPEN_API_KEY"] = st.secrets["OPEN_API_KEY"]
-os.environ["ANTHROPIC_API_KEY"] = st.secrets["ANTHROPIC_API_KEY"]
-# ── PART A: BUILD THE CHAIN ──────────────────────────────────────────────────
+
  
 # Initialize the LLM
-llm = ChatOpenAI(model="gpt-4o-mini")
+llm = ChatOpenAI(
+    model="gpt-4o-mini", 
+    api_key=st.secrets.get("OPENAI_API_KEY")
+)
  
 # Create a PromptTemplate that takes 'genre' and 'mood' as variables
 # and formats them into a specific search query

@@ -8,7 +8,7 @@ from langchain_community.tools import DuckDuckGoSearchRun
 from langchain.agents import create_agent
  
 # ── API KEY ──────────────────────────────────────────────────────────────────
-os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
+os.environ["OPEN_API_KEY"] = st.secrets["OPEN_API_KEY"]
 os.environ["ANTHROPIC_API_KEY"] = st.secrets["ANTHROPIC_API_KEY"]
 # ── PART A: BUILD THE CHAIN ──────────────────────────────────────────────────
  

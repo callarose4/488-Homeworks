@@ -10,7 +10,9 @@ sentence_transformers
 langchain
 langchain-anthropic
 langchain-openai
+langchain-community
+langchain-core
 langchain.tools
-
+ddgs
 
 

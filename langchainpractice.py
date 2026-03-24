@@ -11,7 +11,7 @@ from langchain.agents import create_agent
 # Initialize the LLM
 llm = ChatOpenAI(
     model="gpt-4o-mini", 
-    api_key=st.secrets.get("OPENAI_API_KEY")
+    api_key=st.secrets.get("OPEN_API_KEY")
 )
  
 # Create a PromptTemplate that takes 'genre' and 'mood' as variables
